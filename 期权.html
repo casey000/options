@@ -1,0 +1,356 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期权波动率计算器</title>
+    <style>        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            width: 100%;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 5px;
+            display: none;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 10px;
+            background-color: #eee;
+            cursor: pointer;
+            border: 1px solid #ddd;
+        }
+        .tab.active {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>期权波动率计算器</h1>
+        
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('historical')">历史波动率计算</div>
+            <div class="tab" onclick="switchTab('implied')">隐含波动率计算</div>
+        </div>
+        
+        <!-- 历史波动率计算 -->
+        <div id="historical" class="tab-content active">
+            <div class="form-group">
+                <label for="prices">历史价格（用逗号分隔）:</label>
+                <input type="text" id="prices" placeholder="例如: 100,102,98,105,103,107,109,106">
+            </div>
+            <div class="form-group">
+                <label for="tradingDays">年交易日数:</label>
+                <input type="number" id="tradingDays" value="252" min="1">
+            </div>
+            <button onclick="calculateHistoricalVolatility()">计算历史波动率</button>
+            
+            <div id="historicalResult" class="result"></div>
+            <div id="historicalError" class="error"></div>
+        </div>
+        
+        <!-- 隐含波动率计算 -->
+        <div id="implied" class="tab-content">
+            <div class="form-group">
+                <label for="marketPrice">期权市场价格:</label>
+                <input type="number" id="marketPrice" step="0.01" placeholder="例如: 5.5">
+            </div>
+            <div class="form-group">
+                <label for="spotPrice">标的资产现价:</label>
+                <input type="number" id="spotPrice" step="0.01" placeholder="例如: 100">
+            </div>
+            <div class="form-group">
+                <label for="strikePrice">行权价:</label>
+                <input type="number" id="strikePrice" step="0.01" placeholder="例如: 100">
+            </div>
+            <div class="form-group">
+                <label for="timeToMaturity">到期时间（年）:</label>
+                <input type="number" id="timeToMaturity" step="0.01" placeholder="例如: 0.5">
+            </div>
+            <div class="form-group">
+                <label for="riskFreeRate">无风险利率:</label>
+                <input type="number" id="riskFreeRate" step="0.001" placeholder="例如: 0.03">
+            </div>
+            <div class="form-group">
+                <label for="optionType">期权类型:</label>
+                <select id="optionType">
+                    <option value="call">看涨期权</option>
+                    <option value="put">看跌期权</option>
+                </select>
+            </div>
+            <button onclick="calculateImpliedVolatility()">计算隐含波动率</button>
+            
+            <div id="impliedResult" class="result"></div>
+            <div id="impliedError" class="error"></div>
+        </div>
+    </div>
+
+    <script>        // 切换标签页
+        function switchTab(tabName) {
+            // 隐藏所有内容
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // 显示选中内容
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        // 计算历史波动率
+        function calculateHistoricalVolatility() {
+            try {
+                // 清除之前的错误信息
+                document.getElementById('historicalError').textContent = '';
+                
+                // 获取输入值
+                const pricesInput = document.getElementById('prices').value;
+                const tradingDays = parseFloat(document.getElementById('tradingDays').value);
+                
+                if (!pricesInput) {
+                    throw new Error('请输入历史价格数据');
+                }
+                
+                // 解析价格数据
+                const prices = pricesInput.split(',').map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                
+                if (prices.length < 2) {
+                    throw new Error('至少需要两个价格数据点');
+                }
+                
+                // 计算历史波动率
+                const volatility = calculateHistoricalVolatilityCore(prices, tradingDays);
+                
+                // 显示结果
+                const resultElement = document.getElementById('historicalResult');
+                resultElement.innerHTML = `                    <h3>计算结果</h3>
+                    <p>历史波动率: <strong>${(volatility * 100).toFixed(4)}%</strong></p>
+                `;
+                resultElement.style.display = 'block';
+            } catch (error) {
+                document.getElementById('historicalError').textContent = error.message;
+                document.getElementById('historicalResult').style.display = 'none';
+            }
+        }
+        
+        // 核心历史波动率计算函数
+        function calculateHistoricalVolatilityCore(prices, annualTradingDays = 252) {
+            // 至少需要3个数据点才能合理计算波动率
+            if (prices.length < 3) {
+                throw new Error('至少需要三个价格数据点才能准确计算波动率');
+            }
+
+            // 1. 计算对数收益率
+            const logReturns = [];
+            for (let i = 1; i < prices.length; i++) {
+                const returnVal = Math.log(prices[i] / prices[i - 1]);
+                logReturns.push(returnVal);
+            }
+            
+            // 2. 计算平均收益率
+            const meanReturn = logReturns.reduce((sum, ret) => sum + ret, 0) / logReturns.length;
+            
+            // 3. 计算方差
+            const variance = logReturns.reduce((sum, ret) => {
+                return sum + Math.pow(ret - meanReturn, 2);
+            }, 0) / (logReturns.length - 1);
+            
+            // 4. 计算标准差并年化
+            const dailyVolatility = Math.sqrt(variance);
+            const annualizedVolatility = dailyVolatility * Math.sqrt(annualTradingDays);
+            
+            return annualizedVolatility;
+        }
+        
+        // 计算隐含波动率
+        function calculateImpliedVolatility() {
+            try {
+                // 清除之前的错误信息
+                document.getElementById('impliedError').textContent = '';
+                
+                // 获取输入值
+                const marketPrice = parseFloat(document.getElementById('marketPrice').value);
+                const spotPrice = parseFloat(document.getElementById('spotPrice').value);
+                const strikePrice = parseFloat(document.getElementById('strikePrice').value);
+                const timeToMaturity = parseFloat(document.getElementById('timeToMaturity').value);
+                const riskFreeRate = parseFloat(document.getElementById('riskFreeRate').value);
+                const optionType = document.getElementById('optionType').value;
+                
+                // 验证输入
+                if (isNaN(marketPrice) || isNaN(spotPrice) || isNaN(strikePrice) || 
+                    isNaN(timeToMaturity) || isNaN(riskFreeRate)) {
+                    throw new Error('请填写所有必填字段');
+                }
+                
+                if (timeToMaturity <= 0) {
+                    throw new Error('到期时间必须大于0');
+                }
+                
+                // 计算隐含波动率
+                const impliedVol = calculateImpliedVolatilityCore(
+                    marketPrice, spotPrice, strikePrice, timeToMaturity, riskFreeRate, optionType
+                );
+                
+                // 显示结果
+                const resultElement = document.getElementById('impliedResult');
+                resultElement.innerHTML = `                    <h3>计算结果</h3>
+                    <p>隐含波动率: <strong>${(impliedVol * 100).toFixed(4)}%</strong></p>
+                `;
+                resultElement.style.display = 'block';
+            } catch (error) {
+                document.getElementById('impliedError').textContent = error.message;
+                document.getElementById('impliedResult').style.display = 'none';
+            }
+        }
+        
+        // 核心隐含波动率计算函数（牛顿法）
+        function calculateImpliedVolatilityCore(marketPrice, spotPrice, strikePrice, timeToMaturity, riskFreeRate, optionType) {
+            let volatility = 0.2; // 初始猜测值
+            const tolerance = 1e-6;
+            const maxIterations = 100;
+            
+            for (let i = 0; i < maxIterations; i++) {
+                // 计算期权理论价格和vega
+                const [optionPrice, vega] = blackScholesWithGreeks(
+                    spotPrice, strikePrice, timeToMaturity, riskFreeRate, volatility, optionType
+                );
+                
+                // 牛顿法迭代
+                const priceDiff = optionPrice - marketPrice;
+                const newVolatility = volatility - priceDiff / vega;
+                
+                // 检查收敛性
+                if (Math.abs(newVolatility - volatility) < tolerance) {
+                    return newVolatility;
+                }
+                
+                volatility = newVolatility;
+                
+                // 防止负值
+                if (volatility <= 0) {
+                    volatility = 0.001;
+                }
+            }
+            
+            return volatility;
+        }
+        
+        // Black-Scholes期权定价及希腊值计算
+        function blackScholesWithGreeks(spotPrice, strikePrice, timeToMaturity, riskFreeRate, volatility, optionType) {
+            // 计算d1和d2
+            const d1 = (Math.log(spotPrice / strikePrice) + 
+                        (riskFreeRate + 0.5 * volatility * volatility) * timeToMaturity) / 
+                       (volatility * Math.sqrt(timeToMaturity));
+                       
+            const d2 = d1 - volatility * Math.sqrt(timeToMaturity);
+            
+            // 标准正态分布累积函数
+            const N = (x) => {
+                return 0.5 * (1 + erf(x / Math.sqrt(2)));
+            };
+            
+            // 标准正态分布概率密度函数
+            const pdf = (x) => {
+                return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+            };
+            
+            // 误差函数近似
+            const erf = (x) => {
+                // 使用Abramowitz and Stegun近似
+                const a1 =  0.254829592;
+                const a2 = -0.284496736;
+                const a3 =  1.421413741;
+                const a4 = -1.453152027;
+                const a5 =  1.061405429;
+                const p  =  0.3275911;
+                
+                const sign = x >= 0 ? 1 : -1;
+                const absX = Math.abs(x);
+                
+                const t = 1.0 / (1.0 + p * absX);
+                const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-absX * absX);
+                
+                return sign * y;
+            };
+            
+            let optionPrice, vega;
+            
+            if (optionType.toLowerCase() === 'call') {
+                optionPrice = spotPrice * N(d1) - strikePrice * Math.exp(-riskFreeRate * timeToMaturity) * N(d2);
+                vega = spotPrice * Math.sqrt(timeToMaturity) * pdf(d1);
+            } else {
+                optionPrice = strikePrice * Math.exp(-riskFreeRate * timeToMaturity) * N(-d2) - spotPrice * N(-d1);
+                vega = spotPrice * Math.sqrt(timeToMaturity) * pdf(d1);
+            }
+            
+            return [optionPrice, vega];
+        }
+    </script>
+</body>
+</html>
